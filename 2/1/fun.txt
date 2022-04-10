@@ -1,0 +1,86 @@
+#include <limits.h>
+#include <assert.h>
+#include <stddef.h>
+
+/* sdtsize: Return the maximum or minimum of a signed integer datatype.
+ *
+ * x is the sizeof() of the datatype.
+ * If neg is true, return the minimum of the datatype.
+ */
+long
+sdtsize(size_t x, const int neg)
+{
+	/* n is unsigned long because long is the biggest datatype (in C89),
+	 * and manipulating bits has no implementation-defined behavior.
+	 * The numeric value of the variable doesn't matter, during the entire
+	 * function n is used only as a field of bits.
+	 *
+	 * ~0UL is 0 unsigned long, with all the bits inverted using the one's
+	 * complement operator. That means all the bits are set. After that it
+	 * is shifted right once to clear the MSB, which is the sign in one's
+	 * complement and two's complement machines.
+	 */
+	unsigned long n = ~0UL >> 1;
+	/* nview is a pointer to long. It is initialized to the address of n
+	 * cast to pointer to long. When it is dereferenced, the bits in n are
+	 * reinterpreted as long.
+	 * This entire setup is there to avoid implementation-defined behavior
+	 * when shifting bits right, using the "reinterpreting bits of a
+	 * datatype with pointer casts" trick I learned from
+	 * https://en.wikipedia.org/wiki/Fast_inverse_square_root .
+	 *
+	 * Dereferencing nview right now would read LONG_MAX, as all the bits
+	 * but the sign are set.
+	 */
+	long *const nview = (long *)&n;
+	/* bitdiff is initialized to long's size in bytes minus the x parameter
+	 * of this function, which is supposed to be the sizeof() of an
+	 * integer datatype, multiplied by the bits per byte (CHAR_BIT) of the
+	 * machine.
+	 * This means bitdiff is initialized to the difference between long's
+	 * size and the size of the datatype fed to this program.
+	 * Using CHAR_BIT instead of hardcoding 8 to convert bytes to bits means
+	 * the program works on machines with more or less than 8 bits per byte
+	 */
+	const unsigned long bitdiff = (sizeof(long) - x) * CHAR_BIT;
+
+	/* long is the biggest datatype. If x is larger than sizeof(long), then
+	 * the function has been fed an invalid value.
+	 */
+	assert(x <= sizeof(long));
+
+	/* Because we want to find the maximum value of any signed integer data
+	 * type, we must shift n right by bitdiff.
+	 *
+	 * After this operation, n's numeric value is the maximum allowed by
+	 * the data type requested, because the exact count of bits minus the
+	 * MSB (sign) of the data type are set.
+	 * Note that n is unsigned, but it is merely a field of bits to be
+	 * looked at through nview.
+	 */
+	n >>= bitdiff;
+
+	/* Return the result of a ternary operator expression.
+	 *
+	 * If the neg parameter is false, the maximum value of the data type
+	 * is requested. nview can be returned untouched as all the bits of the
+	 * data type except the sign are already set, and thus its numeric value
+	 * is already the maximum the data type can hold.
+	 *
+	 * If the neg parameter is true, we have to return a negative value.
+	 * To achieve this, the number nview points to must be inverted and
+	 * subtracted by 1 in case the machine is two's complement, as nview
+	 * is set to the maximum positive value of the data type, yet the
+	 * minimum value of a signed data type in a two's complement machine
+	 * is one less than the maximum value inverted.
+	 * After the inversion of nview, there is a test.
+	 * In one's complement machines, -1 equals ~1 because all it takes to
+	 * invert a number is one's complement is flipping all of its bits.
+	 * In two's complement, this is not true. The test becomes 1 in two's
+	 * complement and 0 in one's complement. The result of the test is
+	 * subtracted from nview, which means we do the subtraction by 1 we need
+	 * on two's complement machines, but we don't do the subtraction we
+	 * don't need on one's complement machines. This function works on both.
+	 */
+	return (neg ? -*nview - (-1 != ~1) : *nview);
+}
